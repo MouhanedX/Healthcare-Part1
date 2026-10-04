@@ -1,0 +1,22 @@
+# Image commune : serveur Flower (superlink) et clients hôpitaux (supernodes)
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    TF_CPP_MIN_LOG_LEVEL=2 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY pyproject.toml .flwrignore ./
+COPY src ./src
+
+# Les données ne sont PAS copiées dans l'image : chaque hôpital monte
+# uniquement son propre dossier via docker-compose (confidentialité).
+
+EXPOSE 9092 9093

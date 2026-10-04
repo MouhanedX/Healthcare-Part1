@@ -1,0 +1,10 @@
+venv/
+data/
+Dataset/
+results/
+docker/
+docs/
+.git/
+__pycache__/
+*.pyc
+*.csv

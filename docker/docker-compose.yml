@@ -1,0 +1,95 @@
+# Smart Healthcare Data Space — déploiement Docker
+#
+# Topologie :
+#   fl-server      : serveur Flower (SuperLink + exécution du ServerApp FedAvg)
+#   fl-hospital-N  : un supernode par hôpital — ne monte QUE son dossier de données
+#   api            : API FastAPI (démarre/monitor les entraînements, expose les stats)
+#
+# Lancement :
+#   docker compose -f docker/docker-compose.yml up --build
+# Entraînement : POST http://localhost:8001/train/start
+# Docs API     : http://localhost:8001/docs
+
+x-fl-common: &fl-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.fl
+  environment: &fl-common-env
+    FL_DATA_DIR: /app/data/hospitals
+    TF_CPP_MIN_LOG_LEVEL: "2"
+
+services:
+  fl-server:
+    <<: *fl-common
+    container_name: fl-server
+    command: flower-superlink --insecure
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      # Le serveur ne voit que le jeu de test global (évaluation centralisée)
+      - ../data/hospitals/test_global.csv:/app/data/hospitals/test_global.csv:ro
+      - ../data/hospitals/preprocess.json:/app/data/hospitals/preprocess.json:ro
+      - ../results:/app/results
+    environment:
+      <<: *fl-common-env
+      FL_RESULTS_DIR: /app/results/runs
+
+  fl-hospital-1:
+    <<: *fl-common
+    container_name: fl-hospital-1
+    command: flower-supernode --insecure --superlink fl-server:9092
+    depends_on:
+      - fl-server
+    environment:
+      <<: *fl-common-env
+      HOSPITAL_ID: "0"
+    volumes:
+      # Chaque hôpital ne monte QUE son propre jeu de données (lecture seule)
+      - ../data/hospitals/hospital_1:/app/data/hospitals/hospital_1:ro
+
+  fl-hospital-2:
+    <<: *fl-common
+    container_name: fl-hospital-2
+    command: flower-supernode --insecure --superlink fl-server:9092
+    depends_on:
+      - fl-server
+    environment:
+      <<: *fl-common-env
+      HOSPITAL_ID: "1"
+    volumes:
+      - ../data/hospitals/hospital_2:/app/data/hospitals/hospital_2:ro
+
+  fl-hospital-3:
+    <<: *fl-common
+    container_name: fl-hospital-3
+    command: flower-supernode --insecure --superlink fl-server:9092
+    depends_on:
+      - fl-server
+    environment:
+      <<: *fl-common-env
+      HOSPITAL_ID: "2"
+    volumes:
+      - ../data/hospitals/hospital_3:/app/data/hospitals/hospital_3:ro
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: fl-api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8001
+    depends_on:
+      - fl-server
+      - fl-hospital-1
+      - fl-hospital-2
+      - fl-hospital-3
+    ports:
+      - "8001:8001"
+    environment:
+      FL_FEDERATION: fl-server
+      FL_DATA_DIR: /app/data/hospitals
+      TF_CPP_MIN_LOG_LEVEL: "2"
+    volumes:
+      - ../data/hospitals:/app/data/hospitals:ro
+      - ../results:/app/results
+      - ../logs:/app/logs

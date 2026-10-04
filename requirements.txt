@@ -1,0 +1,6 @@
+flwr==1.36.0
+tensorflow==2.21.0
+numpy>=2.0
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7

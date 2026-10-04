@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "smarthealth-dataspace"
+version = "1.0.0"
+description = "Smart Healthcare Data Space — Federated Learning avec Flower, TensorFlow et FastAPI"
+requires-python = ">=3.11"
+
+[tool.flwr.app]
+publisher = "supcom-dataspace"
+version = "1.0.0"
+
+[tool.flwr.app.components]
+serverapp = "src.fl.server_app:app"
+clientapp = "src.fl.client_app:app"
+
+[tool.flwr.app.config]
+num-rounds = 5
+local-epochs = 2
+batch-size = 128
+min-clients = 3
+data-dir = ""
+metrics-dir = "results/runs"
+
+
+#######################################################################
+# CONFIGURATION MIGRATION NOTICE:
+#
+# What was previously called "federation config" for SuperLink
+# connections in pyproject.toml has been renamed and moved.
+#
+# These settings are now **SuperLink connection configuration**
+# and are defined in the Flower configuration file.
+#
+# The entries below are commented out intentionally and are kept
+# only as a migration reference.
+#
+# Docs: https://flower.ai/docs/framework/ref-flower-configuration.html
+#######################################################################
+
+# [tool.flwr.federations]
+# default = "local-deployment"
+
+# [tool.flwr.federations.local-deployment]
+# options.num-supernodes = 3

@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+
+# Artefacts dérivés : régénérés localement, jamais versionnés
+# (datasets par hôpital via src/data/prepare.py, runs, logs)
+data/hospitals/
+results/
+logs/
+
+# Dataset source original (copie versionnée dans data/raw/)
+Dataset/
+.flwr/
