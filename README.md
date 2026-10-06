@@ -129,8 +129,8 @@ Résultat : **15 features** d'entrée.
 
 ## 5. Le modèle
 
-MLP Keras compact (~2 050 paramètres), adapté au FL où les poids transitent à
-chaque round :
+MLP Keras compact (**1 057 paramètres, 4,1 Ko**), adapté au FL où les poids
+transitent à chaque round :
 
 ```
 Entrée (15) → Dense(32, ReLU) → Dense(16, ReLU) → Dense(1, sigmoïde)
@@ -140,6 +140,57 @@ Entrée (15) → Dense(32, ReLU) → Dense(16, ReLU) → Dense(1, sigmoïde)
 - **Loss** : binary cross-entropy ; **optimizer** : Adam (lr 1e-3).
 - **Entraînement local** : `batch-size = 128` (≈ 261 mises à jour de poids par
   epoch pour l'hôpital 1), `local-epochs = 2`, paramétrables via l'API.
+
+### Pourquoi ce modèle ? La justification complète
+
+**Un MLP parce que les données sont tabulaires.** Chaque patient est une ligne
+de 15 colonnes numériques — ni structure spatiale (pas de CNN), ni temporelle
+(pas de RNN/LSTM), ni textuelle (pas de transformer). Un MLP, des combinaisons
+pondérées passées dans des non-linéarités, est l'outil naturel : il apprend
+des interactions du type « glycémie élevée **ET** IMC élevé **ET** âge avancé ».
+C'est aussi de la **classification binaire** : la sortie sigmoïde se lit
+directement comme une probabilité clinique (utilisée par `/predict` : risque
+élevé si p > 0,7). Face au candidat le plus simple (régression logistique =
+le même réseau *sans* couches cachées), les deux couches ReLU apportent la
+non-linéarité nécessaire : les relations âge/glycémie/risque ne sont pas une
+frontière droite dans l'espace des features.
+
+**Si petit (1 057 paramètres, 4,1 Ko) à cause du FL.** Ces poids font des
+allers-retours serveur ↔ 3 hôpitaux **à chaque round** et doivent être
+moyennables par FedAvg :
+
+- **Communication** : 4 Ko par transfert, négligeable ; un CNN de 25 M de
+  paramètres ferait 100 Mo × 3 hôpitaux × 2 sens × N rounds ;
+- **Agrégeabilité** : FedAvg ne marche que sur des modèles à poids continus.
+  Un modèle à arbres (Random Forest, XGBoost — pourtant excellents sur
+  tabulaire) n'a pas de poids à moyenner : c'est une des raisons majeures pour
+  lesquelles le FL est dominé par les réseaux de neurones ;
+- **Robustesse** : 1 057 paramètres pour 80 000 exemples = modèle massivement
+  sous-paramétré, risque d'overfitting très faible, entraînable en quelques
+  secondes sur CPU — réaliste pour « l'ordinateur d'un hôpital ».
+
+**Keras / TensorFlow** pour trois raisons pragmatiques : l'environnement les
+embarque déjà ; l'interface `get_weights()` / `set_weights()` de Keras est
+exactement ce que Flower attend (le client FL tient en 3 lignes :
+`set_weights` → `model.fit` → `get_weights`) ; et `model.fit` gère
+batches/rétropropagation/Adam avec une API stable. (PyTorch aurait fait
+l'affaire aussi — choix de confort, pas de supériorité.)
+
+**Les choix internes :**
+
+| Élément | Choix | Pourquoi |
+|---|---|---|
+| Activation cachées | ReLU | standard, coût quasi nul, évite le gradient qui s'évanouit |
+| Activation sortie | Sigmoïde | sortie = probabilité ∈ [0,1], interprétable cliniquement |
+| Loss | Binary cross-entropy | appariée à la sigmoïde binaire ; pénalise la confiance dans l'erreur |
+| Optimizer | Adam (lr 1e-3) | converge vite sans réglage fin |
+| Tailles 32 → 16 | entonnoir classique | compression progressive (32 → 16 → 1), suffisant pour 15 features |
+| Seed fixe (42) | reproductibilité | initialisations identiques, expériences répétables |
+
+**Limites assumées :** un XGBoost ferait probablement ~97 % sur ces données,
+mais n'est pas fédérable par moyenne de poids — le MLP est le bon compromis
+*pour ce projet* ; aucune régularisation (dropout/L2), inutile vu le
+sous-paramétrage, à ajouter si le modèle grossit.
 
 ## 6. Le Federated Learning en pratique
 
